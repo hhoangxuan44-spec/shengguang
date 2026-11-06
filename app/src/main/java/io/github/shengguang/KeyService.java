@@ -125,6 +125,12 @@ public class KeyService extends AccessibilityService {
     }
 
     @Override
+    public void onConfigurationChanged(android.content.res.Configuration newConfig) {
+        super.onConfigurationChanged(newConfig);
+        if (sliders != null) sliders.relayout();
+    }
+
+    @Override
     public void onAccessibilityEvent(AccessibilityEvent event) {
         // 实测：下拉面板打开发 PANE_APPEARED，收起发 PANE_DISAPPEARED，通知栏和快捷设置互切没有开关信号。
         // 锁屏也发 PANE_APPEARED，所以按系统的锁屏状态排除，不看事件文字。
