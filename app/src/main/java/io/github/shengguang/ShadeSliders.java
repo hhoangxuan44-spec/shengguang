@@ -100,12 +100,17 @@ final class ShadeSliders {
         }));
         root.addView(row("亮度", lightBar, lightValue));
 
-        int width = Math.min(context.getResources().getDisplayMetrics().widthPixels - px(32), px(560));
+        // 横屏时酷比的控制中心占右侧约 30%，滑块放到左边的空白处，不挡它的按钮
+        int screen = context.getResources().getDisplayMetrics().widthPixels;
+        boolean landscape = context.getResources().getConfiguration().orientation
+                == android.content.res.Configuration.ORIENTATION_LANDSCAPE;
+        int width = Math.min(landscape ? (int) (screen * 0.62) : screen - px(32), px(560));
         WindowManager.LayoutParams lp = new WindowManager.LayoutParams(width, -2,
                 WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
                 PixelFormat.TRANSLUCENT);
-        lp.gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
+        lp.gravity = Gravity.BOTTOM | (landscape ? Gravity.LEFT : Gravity.CENTER_HORIZONTAL);
+        if (landscape) lp.x = px(40);
         lp.y = px(24);
         try {
             wm.addView(root, lp);
