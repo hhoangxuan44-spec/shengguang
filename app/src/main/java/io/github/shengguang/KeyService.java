@@ -124,6 +124,10 @@ public class KeyService extends AccessibilityService {
 
     @Override
     public void onAccessibilityEvent(AccessibilityEvent event) {
+        // 临时诊断：弄清下拉面板开关时系统发什么事件。只收 systemui 的事件，确认后删除。
+        Log.i(Sound.TAG, "EVT type=" + AccessibilityEvent.eventTypeToString(event.getEventType())
+                + " changes=" + event.getWindowChanges() + " content=" + event.getContentChangeTypes()
+                + " class=" + event.getClassName() + " text=" + event.getText());
     }
 
     @Override
