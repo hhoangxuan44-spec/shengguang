@@ -1,8 +1,10 @@
 name: 编译并发布
 
+# 每个分支推送都编译和测试；只有 main 发布 Release（面板里的「下载最新版」指向它）。
+# 版本号用同一个工作流的运行序号，分支上编出来的包也能直接覆盖安装旧版本。
 on:
   push:
-    branches: [main]
+    branches: ["**"]
 
 permissions:
   contents: write
@@ -30,9 +32,19 @@ jobs:
           SIGN_KEYSTORE: ${{ runner.temp }}/sign.keystore
           SIGN_PASSWORD: ${{ secrets.SIGN_PASSWORD }}
         run: gradle testReleaseUnitTest assembleRelease --no-daemon --stacktrace
+      - name: 上传分支安装包
+        if: github.ref != 'refs/heads/main'
+        uses: actions/upload-artifact@v4
+        with:
+          name: shengguang-v${{ github.run_number }}
+          path: app/build/outputs/apk/release/app-release.apk
       - name: 发布
+        if: github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           cp app/build/outputs/apk/release/app-release.apk shengguang.apk
-          gh release create "v${GITHUB_RUN_NUMBER}" shengguang.apk --target "$GITHUB_SHA" --title "声光 v${GITHUB_RUN_NUMBER}" --notes "提交 ${GITHUB_SHA}"
+          # 更新说明用提交信息，去掉末尾的署名行
+          notes="$(git log -1 --format=%B | grep -v -e '^Co-Authored-By:' -e '^Claude-Session:')"
+          printf '%s\n\n提交 %s\n' "$notes" "$GITHUB_SHA" > notes.md
+          gh release create "v${GITHUB_RUN_NUMBER}" shengguang.apk --target "$GITHUB_SHA" --title "声光 v${GITHUB_RUN_NUMBER}" --notes-file notes.md

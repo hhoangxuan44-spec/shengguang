@@ -81,7 +81,9 @@ public class KeyService extends AccessibilityService {
 
     private void step(int dir) {
         Sound s = Sound.get(this);
-        showPill("音量 " + s.setLevel(s.level() + dir * STEP));
+        int l = s.setLevel(s.level() + dir * STEP);
+        Route r = s.route();
+        showPill(r == Route.SPEAKER ? "音量 " + l : r.label + "  " + l);
     }
 
     private void showPill(String s) {

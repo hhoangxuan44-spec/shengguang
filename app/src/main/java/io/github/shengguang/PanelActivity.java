@@ -1,8 +1,10 @@
 package io.github.shengguang;
 
 import android.app.Activity;
+import android.content.ActivityNotFoundException;
 import android.content.ComponentName;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.content.res.ColorStateList;
 import android.graphics.Color;
 import android.graphics.Typeface;
@@ -22,10 +24,13 @@ import android.widget.Toast;
 /** 声光面板：音量和亮度各一个滑块，都是单向设置，只有手指拖动才会改系统值。 */
 public class PanelActivity extends Activity {
     private static final int INK = 0xFFF2F2F7, MUTED = 0xFF8E8E93, CARD = 0xFF2C2C2E, ACCENT = 0xFFFFD60A;
+    // 应用本身没有联网权限：更新交给浏览器下载，系统安装器安装
+    private static final String RELEASES = "https://github.com/hhoangxuan44-spec/shengguang/releases/latest";
+    private static final String APK = RELEASES + "/download/shengguang.apk";
 
     private Sound sound;
     private SeekBar soundBar, lightBar;
-    private TextView soundValue, lightValue;
+    private TextView soundValue, lightValue, routeInfo;
     private final TextView[] modeBtn = new TextView[3];
     private TextView shadeBtn;
     private LinearLayout notes;
@@ -46,6 +51,8 @@ public class PanelActivity extends Activity {
         // 音量
         soundValue = text("", 15, MUTED);
         root.addView(header("音量", soundValue));
+        routeInfo = text("", 13, MUTED);
+        root.addView(routeInfo);
         soundBar = slider(Curve.LEVELS, ACCENT, p -> {
             sound.setLevel(p);
             showSound();
@@ -115,6 +122,22 @@ public class PanelActivity extends Activity {
         notes = new LinearLayout(this);
         notes.setOrientation(LinearLayout.VERTICAL);
         root.addView(notes);
+
+        // 更新
+        TextView ver = text("当前版本 " + versionName(), 15, INK);
+        ver.setPadding(0, px(16), 0, px(4));
+        root.addView(ver);
+        LinearLayout update = row();
+        TextView download = chip("下载最新版");
+        download.setOnClickListener(v -> openUrl(APK));
+        update.addView(download, weight());
+        TextView changes = chip("看更新说明");
+        changes.setOnClickListener(v -> openUrl(RELEASES));
+        update.addView(changes, weight());
+        root.addView(update);
+        TextView how = text("用浏览器下载安装包，下载完点开安装即可覆盖旧版，设置和授权都会保留。", 13, MUTED);
+        how.setPadding(0, px(6), 0, 0);
+        root.addView(how);
 
         ScrollView sv = new ScrollView(this);
         sv.addView(root);
@@ -192,6 +215,26 @@ public class PanelActivity extends Activity {
 
     private void showSound() {
         soundValue.setText(String.valueOf(sound.level()));
+        Route r = sound.route();
+        routeInfo.setText(r.external
+                ? "输出：" + r.label + "（由耳机调节音量，细调只往下压，不会削顶）"
+                : "输出：" + r.label);
+    }
+
+    private String versionName() {
+        try {
+            return getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
+        } catch (PackageManager.NameNotFoundException e) {
+            return "?";
+        }
+    }
+
+    private void openUrl(String url) {
+        try {
+            startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+        } catch (ActivityNotFoundException e) {
+            Toast.makeText(this, "没有找到浏览器", Toast.LENGTH_SHORT).show();
+        }
     }
 
     private void showLight(int s) {
