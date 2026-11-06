@@ -38,9 +38,11 @@ public class KeyService extends AccessibilityService {
         }
     };
     private final Runnable hidePill = this::removePill;
+    private ShadeSliders sliders;
 
     @Override
     protected void onServiceConnected() {
+        sliders = new ShadeSliders(this);
         Sound.get(this).warm();
         Log.i(Sound.TAG, "KeyService connected, mode=" + Sound.get(this).mode());
     }
@@ -124,10 +126,16 @@ public class KeyService extends AccessibilityService {
 
     @Override
     public void onAccessibilityEvent(AccessibilityEvent event) {
-        // 临时诊断：弄清下拉面板开关时系统发什么事件。只收 systemui 的事件，确认后删除。
-        Log.i(Sound.TAG, "EVT type=" + AccessibilityEvent.eventTypeToString(event.getEventType())
-                + " changes=" + event.getWindowChanges() + " content=" + event.getContentChangeTypes()
-                + " class=" + event.getClassName() + " text=" + event.getText());
+        // 实测：下拉面板打开发 PANE_APPEARED，收起发 PANE_DISAPPEARED，通知栏和快捷设置互切没有开关信号。
+        // 锁屏也发 PANE_APPEARED，所以按系统的锁屏状态排除，不看事件文字。
+        int changes = event.getContentChangeTypes();
+        if ((changes & AccessibilityEvent.CONTENT_CHANGE_TYPE_PANE_DISAPPEARED) != 0) {
+            sliders.hide();
+        } else if ((changes & AccessibilityEvent.CONTENT_CHANGE_TYPE_PANE_APPEARED) != 0) {
+            boolean locked = ((android.app.KeyguardManager) getSystemService(KEYGUARD_SERVICE)).isKeyguardLocked();
+            if (!locked && Sound.get(this).shadeSliders()) sliders.show();
+            else sliders.hide();
+        }
     }
 
     @Override
@@ -138,6 +146,7 @@ public class KeyService extends AccessibilityService {
     public void onDestroy() {
         main.removeCallbacksAndMessages(null);
         removePill();
+        if (sliders != null) sliders.hide();
         super.onDestroy();
     }
 }

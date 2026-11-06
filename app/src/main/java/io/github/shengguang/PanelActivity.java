@@ -27,6 +27,7 @@ public class PanelActivity extends Activity {
     private SeekBar soundBar, lightBar;
     private TextView soundValue, lightValue;
     private final TextView[] modeBtn = new TextView[3];
+    private TextView shadeBtn;
     private LinearLayout notes;
 
     @Override
@@ -102,6 +103,15 @@ public class PanelActivity extends Activity {
         }
         root.addView(modes);
 
+        shadeBtn = chip("");
+        shadeBtn.setOnClickListener(v -> {
+            sound.setShadeSliders(!sound.shadeSliders());
+            refresh();
+        });
+        LinearLayout shadeRow = row();
+        shadeRow.addView(shadeBtn, weight());
+        root.addView(shadeRow);
+
         notes = new LinearLayout(this);
         notes.setOrientation(LinearLayout.VERTICAL);
         root.addView(notes);
@@ -139,6 +149,7 @@ public class PanelActivity extends Activity {
             paint(modeBtn[i], on ? ACCENT : CARD);
             modeBtn[i].setTextColor(on ? Color.BLACK : INK);
         }
+        shadeBtn.setText(sound.shadeSliders() ? "下拉时显示滑块：开" : "下拉时显示滑块：关");
         notes.removeAllViews();
         if (!keyServiceOn()) {
             note("音量键和细调常驻需要开启无障碍服务。", "打开无障碍设置",

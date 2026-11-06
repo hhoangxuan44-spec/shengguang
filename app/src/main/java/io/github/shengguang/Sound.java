@@ -53,6 +53,14 @@ final class Sound {
         prefs.edit().putInt("mode", m).apply();
     }
 
+    boolean shadeSliders() {
+        return prefs.getBoolean("shadeSliders", true);
+    }
+
+    void setShadeSliders(boolean on) {
+        prefs.edit().putBoolean("shadeSliders", on).apply();
+    }
+
     /** 面板打开时用它跟随按键带来的变化。 */
     synchronized void setListener(Runnable r) {
         listener = r;

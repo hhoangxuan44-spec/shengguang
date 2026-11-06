@@ -1,4 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="key_service_desc">只处理音量加、音量减两个按键：过滤按键抖动，并按更细的等级调节音量。不读取屏幕内容，应用也没有联网权限。</string>
+    <string name="key_service_desc">处理音量加、音量减两个按键：过滤按键抖动，并按更细的等级调节音量。另外接收系统界面的窗口变化，用来在下拉面板打开时显示滑块。不读取屏幕内容，应用也没有联网权限。</string>
 </resources>
