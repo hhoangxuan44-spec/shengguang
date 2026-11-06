@@ -1,0 +1,298 @@
+package io.github.shengguang;
+
+import android.app.Activity;
+import android.content.ComponentName;
+import android.content.Intent;
+import android.content.res.ColorStateList;
+import android.graphics.Color;
+import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
+import android.net.Uri;
+import android.os.Bundle;
+import android.provider.Settings;
+import android.util.TypedValue;
+import android.view.Gravity;
+import android.view.View;
+import android.widget.LinearLayout;
+import android.widget.ScrollView;
+import android.widget.SeekBar;
+import android.widget.TextView;
+import android.widget.Toast;
+
+/** 声光面板：音量和亮度各一个滑块，都是单向设置，只有手指拖动才会改系统值。 */
+public class PanelActivity extends Activity {
+    private static final int INK = 0xFFF2F2F7, MUTED = 0xFF8E8E93, CARD = 0xFF2C2C2E, ACCENT = 0xFFFFD60A;
+
+    private Sound sound;
+    private SeekBar soundBar, lightBar;
+    private TextView soundValue, lightValue;
+    private final TextView[] modeBtn = new TextView[3];
+    private LinearLayout notes;
+
+    @Override
+    protected void onCreate(Bundle b) {
+        super.onCreate(b);
+        sound = Sound.get(this);
+
+        LinearLayout root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setPadding(px(22), px(20), px(22), px(20));
+        GradientDrawable bg = new GradientDrawable();
+        bg.setCornerRadius(px(28));
+        bg.setColor(0xFF1C1C1E);
+        root.setBackground(bg);
+
+        // 音量
+        soundValue = text("", 15, MUTED);
+        root.addView(header("音量", soundValue));
+        soundBar = slider(Curve.LEVELS, ACCENT, p -> {
+            sound.setLevel(p);
+            showSound();
+        });
+        root.addView(sliderRow(soundBar, d -> {
+            sound.setLevel(sound.level() + d);
+            soundBar.setProgress(sound.level());
+            showSound();
+        }));
+
+        // 亮度
+        lightValue = text("", 15, MUTED);
+        LinearLayout lh = header("亮度", lightValue);
+        lh.setPadding(0, px(14), 0, 0);
+        root.addView(lh);
+        lightBar = slider(Light.MAX, Color.WHITE, this::setLight);
+        root.addView(sliderRow(lightBar, d -> {
+            int s = clampLight(lightBar.getProgress() + d * 5);
+            lightBar.setProgress(s);
+            setLight(s);
+        }));
+
+        LinearLayout presets = row();
+        for (int i = 0; i < Light.PRESET_NAMES.length; i++) {
+            final int idx = i;
+            TextView t = chip(Light.PRESET_NAMES[i]);
+            t.setOnClickListener(v -> {
+                int s = clampLight(Light.preset(this, idx));
+                lightBar.setProgress(s);
+                setLight(s);
+            });
+            t.setOnLongClickListener(v -> {
+                Light.savePreset(this, idx, lightBar.getProgress());
+                Toast.makeText(this, "已存为「" + Light.PRESET_NAMES[idx] + "」", Toast.LENGTH_SHORT).show();
+                return true;
+            });
+            presets.addView(t, weight());
+        }
+        root.addView(presets);
+
+        // 音量键
+        TextView keys = text("音量键", 15, INK);
+        keys.setPadding(0, px(16), 0, px(4));
+        root.addView(keys);
+        LinearLayout modes = row();
+        String[] names = {"系统默认", "只防抖", "细调接管"};
+        for (int i = 0; i < modeBtn.length; i++) {
+            final int m = i;
+            modeBtn[i] = chip(names[i]);
+            modeBtn[i].setOnClickListener(v -> {
+                sound.setMode(m);
+                refresh();
+            });
+            modes.addView(modeBtn[i], weight());
+        }
+        root.addView(modes);
+
+        notes = new LinearLayout(this);
+        notes.setOrientation(LinearLayout.VERTICAL);
+        root.addView(notes);
+
+        ScrollView sv = new ScrollView(this);
+        sv.addView(root);
+        setContentView(sv);
+        int width = Math.min(getResources().getDisplayMetrics().widthPixels - px(32), px(520));
+        getWindow().setLayout(width, -2);
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        sound.setListener(() -> runOnUiThread(() -> {
+            soundBar.setProgress(sound.level());
+            showSound();
+        }));
+        refresh();
+    }
+
+    @Override
+    protected void onPause() {
+        sound.setListener(null);
+        super.onPause();
+    }
+
+    private void refresh() {
+        soundBar.setProgress(sound.level());
+        showSound();
+        lightBar.setProgress(Light.read(this));
+        showLight(lightBar.getProgress());
+        for (int i = 0; i < modeBtn.length; i++) {
+            boolean on = i == sound.mode();
+            paint(modeBtn[i], on ? ACCENT : CARD);
+            modeBtn[i].setTextColor(on ? Color.BLACK : INK);
+        }
+        notes.removeAllViews();
+        if (!keyServiceOn()) {
+            note("音量键和细调常驻需要开启无障碍服务。", "打开无障碍设置",
+                    v -> startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));
+        }
+        if (!Light.canWrite(this)) {
+            note("调亮度需要「修改系统设置」权限。", "去授权", v -> startActivity(
+                    new Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS, Uri.parse("package:" + getPackageName()))));
+        }
+        if (!Light.canSecure(this)) {
+            TextView t = text("极暗需要用电脑授权一次，授权前亮度滑块停在 " + Light.SPLIT + " 以上：\nadb shell pm grant "
+                    + getPackageName() + " " + Light.SECURE_PERMISSION, 13, MUTED);
+            t.setTextIsSelectable(true);
+            t.setPadding(0, px(12), 0, 0);
+            notes.addView(t);
+        }
+    }
+
+    private boolean keyServiceOn() {
+        String v = Settings.Secure.getString(getContentResolver(), Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
+        if (v == null) return false;
+        ComponentName me = new ComponentName(this, KeyService.class);
+        for (String s : v.split(":")) {
+            if (me.equals(ComponentName.unflattenFromString(s))) return true;
+        }
+        return false;
+    }
+
+    private int clampLight(int s) {
+        int lo = Light.canSecure(this) ? 0 : Light.SPLIT;
+        return Math.max(lo, Math.min(Light.MAX, s));
+    }
+
+    private void setLight(int s) {
+        int c = clampLight(s);
+        if (c != s) lightBar.setProgress(c);
+        Light.apply(this, c);
+        showLight(c);
+    }
+
+    private void showSound() {
+        soundValue.setText(String.valueOf(sound.level()));
+    }
+
+    private void showLight(int s) {
+        int dim = Light.levelFor(s);
+        lightValue.setText(dim > 0 ? "极暗 " + dim : "亮度 " + Light.brightnessFor(s));
+    }
+
+    // ------------------------------------------------------------ 界面小工具
+
+    private interface IntAction {
+        void run(int v);
+    }
+
+    private SeekBar slider(int max, int color, IntAction onUser) {
+        SeekBar s = new SeekBar(this);
+        s.setMax(max);
+        s.setSplitTrack(false);
+        s.setProgressTintList(ColorStateList.valueOf(color));
+        s.setThumbTintList(ColorStateList.valueOf(color));
+        s.setProgressBackgroundTintList(ColorStateList.valueOf(0xFF48484A));
+        s.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar bar, int p, boolean fromUser) {
+                if (fromUser) onUser.run(p);
+            }
+
+            @Override
+            public void onStartTrackingTouch(SeekBar bar) {
+            }
+
+            @Override
+            public void onStopTrackingTouch(SeekBar bar) {
+            }
+        });
+        return s;
+    }
+
+    private LinearLayout sliderRow(SeekBar bar, IntAction nudge) {
+        LinearLayout r = row();
+        r.setGravity(Gravity.CENTER_VERTICAL);
+        r.addView(round("−", v -> nudge.run(-1)), new LinearLayout.LayoutParams(px(44), px(44)));
+        r.addView(bar, new LinearLayout.LayoutParams(0, px(44), 1f));
+        r.addView(round("+", v -> nudge.run(1)), new LinearLayout.LayoutParams(px(44), px(44)));
+        return r;
+    }
+
+    private LinearLayout header(String title, TextView value) {
+        LinearLayout h = new LinearLayout(this);
+        h.setGravity(Gravity.CENTER_VERTICAL);
+        TextView t = text(title, 18, INK);
+        t.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+        h.addView(t, new LinearLayout.LayoutParams(0, -2, 1f));
+        h.addView(value);
+        return h;
+    }
+
+    private void note(String msg, String action, View.OnClickListener l) {
+        TextView t = text(msg, 13, MUTED);
+        t.setPadding(0, px(12), 0, px(6));
+        notes.addView(t);
+        TextView b = chip(action);
+        b.setOnClickListener(l);
+        notes.addView(b, new LinearLayout.LayoutParams(-1, -2));
+    }
+
+    private TextView round(String s, View.OnClickListener l) {
+        TextView t = text(s, 20, INK);
+        t.setGravity(Gravity.CENTER);
+        GradientDrawable g = new GradientDrawable();
+        g.setShape(GradientDrawable.OVAL);
+        g.setColor(CARD);
+        t.setBackground(g);
+        t.setOnClickListener(l);
+        return t;
+    }
+
+    private TextView chip(String s) {
+        TextView t = text(s, 14, INK);
+        t.setGravity(Gravity.CENTER);
+        t.setPadding(px(6), px(11), px(6), px(11));
+        paint(t, CARD);
+        return t;
+    }
+
+    private void paint(TextView t, int color) {
+        GradientDrawable g = new GradientDrawable();
+        g.setCornerRadius(px(14));
+        g.setColor(color);
+        t.setBackground(g);
+    }
+
+    private TextView text(String s, float sp, int color) {
+        TextView t = new TextView(this);
+        t.setText(s);
+        t.setTextSize(TypedValue.COMPLEX_UNIT_SP, sp);
+        t.setTextColor(color);
+        return t;
+    }
+
+    private LinearLayout row() {
+        LinearLayout r = new LinearLayout(this);
+        r.setPadding(0, px(6), 0, px(2));
+        return r;
+    }
+
+    private LinearLayout.LayoutParams weight() {
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, -2, 1f);
+        lp.setMargins(px(3), 0, px(3), 0);
+        return lp;
+    }
+
+    private int px(float v) {
+        return Math.round(v * getResources().getDisplayMetrics().density);
+    }
+}

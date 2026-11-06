@@ -1,0 +1,45 @@
+plugins {
+    id "com.android.application"
+}
+
+android {
+    namespace "io.github.shengguang"
+    compileSdk 35
+
+    defaultConfig {
+        applicationId "io.github.shengguang"
+        minSdk 30
+        targetSdk 34
+        versionCode Integer.parseInt(System.getenv("GITHUB_RUN_NUMBER") ?: "1")
+        versionName "1." + (System.getenv("GITHUB_RUN_NUMBER") ?: "0")
+    }
+
+    // 密钥只存在 GitHub Secret 和本人电脑上，不进仓库
+    signingConfigs {
+        release {
+            String path = System.getenv("SIGN_KEYSTORE")
+            if (path != null) {
+                storeFile file(path)
+                storePassword System.getenv("SIGN_PASSWORD")
+                keyAlias "shengguang"
+                keyPassword System.getenv("SIGN_PASSWORD")
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            if (System.getenv("SIGN_KEYSTORE") != null) signingConfig signingConfigs.release
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    testImplementation "junit:junit:4.13.2"
+}
