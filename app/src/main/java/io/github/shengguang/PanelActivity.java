@@ -223,7 +223,8 @@ public class PanelActivity extends Activity {
 
     private String versionName() {
         try {
-            return getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
+            // 和发布页的「声光 vN」对得上
+            return "v" + getPackageManager().getPackageInfo(getPackageName(), 0).getLongVersionCode();
         } catch (PackageManager.NameNotFoundException e) {
             return "?";
         }
