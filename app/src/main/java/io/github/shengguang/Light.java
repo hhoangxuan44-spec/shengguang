@@ -51,15 +51,18 @@ final class Light {
         return c.checkSelfPermission(SECURE_PERMISSION) == PackageManager.PERMISSION_GRANTED;
     }
 
+    /**
+     * 读当前刻度。极暗的两个设置是隐藏项，targetSdk 31 起普通应用读取会抛 SecurityException，只能写。
+     * 所以记住自己上次设的刻度：系统亮度没被别处改过就用它，改过就按系统亮度换算。
+     */
     static int read(Context c) {
-        ContentResolver r = c.getContentResolver();
-        try {
-            int b = Settings.System.getInt(r, Settings.System.SCREEN_BRIGHTNESS, 128);
-            boolean on = Settings.Secure.getInt(r, K_ACTIVE, 0) == 1;
-            return scaleFor(b, on, Settings.Secure.getInt(r, K_LEVEL, 0));
-        } catch (RuntimeException e) {
-            return 700;
-        }
+        int b = Settings.System.getInt(c.getContentResolver(), Settings.System.SCREEN_BRIGHTNESS, 128);
+        int saved = prefs(c).getInt("scale", -1);
+        return saved >= 0 && brightnessFor(saved) == b ? saved : scaleFor(b, false, 0);
+    }
+
+    private static android.content.SharedPreferences prefs(Context c) {
+        return c.getSharedPreferences("light", Context.MODE_PRIVATE);
     }
 
     /** 应用刻度。没有 WRITE_SETTINGS 时返回 false；没有 WRITE_SECURE_SETTINGS 时只改亮度。 */
@@ -72,13 +75,10 @@ final class Light {
             Settings.System.putInt(r, Settings.System.SCREEN_BRIGHTNESS, brightnessFor(s));
             if (canSecure(c)) {
                 int lv = levelFor(s);
-                if (lv > 0) {
-                    Settings.Secure.putInt(r, K_LEVEL, lv);
-                    Settings.Secure.putInt(r, K_ACTIVE, 1);
-                } else if (Settings.Secure.getInt(r, K_ACTIVE, 0) == 1) {
-                    Settings.Secure.putInt(r, K_ACTIVE, 0);
-                }
+                if (lv > 0) Settings.Secure.putInt(r, K_LEVEL, lv);
+                Settings.Secure.putInt(r, K_ACTIVE, lv > 0 ? 1 : 0);
             }
+            prefs(c).edit().putInt("scale", s).apply();
             return true;
         } catch (RuntimeException e) {
             Log.w(Sound.TAG, "light", e);
@@ -87,10 +87,10 @@ final class Light {
     }
 
     static int preset(Context c, int i) {
-        return c.getSharedPreferences("light", Context.MODE_PRIVATE).getInt("preset" + i, PRESET_DEFAULT[i]);
+        return prefs(c).getInt("preset" + i, PRESET_DEFAULT[i]);
     }
 
     static void savePreset(Context c, int i, int s) {
-        c.getSharedPreferences("light", Context.MODE_PRIVATE).edit().putInt("preset" + i, s).apply();
+        prefs(c).edit().putInt("preset" + i, s).apply();
     }
 }
