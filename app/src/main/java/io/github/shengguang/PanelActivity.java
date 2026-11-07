@@ -38,6 +38,7 @@ public class PanelActivity extends Activity {
     @Override
     protected void onCreate(Bundle b) {
         super.onCreate(b);
+        CrashLog.install(this);
         sound = Sound.get(this);
 
         LinearLayout root = new LinearLayout(this);
@@ -174,9 +175,23 @@ public class PanelActivity extends Activity {
         }
         shadeBtn.setText(sound.shadeSliders() ? "下拉时显示滑块：开" : "下拉时显示滑块：关");
         notes.removeAllViews();
+        String crash = CrashLog.last(this);
+        if (crash != null) {
+            TextView t = text("上次崩溃（可长按复制发给开发者）：\n" + crash, 11, MUTED);
+            t.setTextIsSelectable(true);
+            t.setMaxLines(12);
+            t.setPadding(0, px(12), 0, px(6));
+            notes.addView(t);
+            TextView clear = chip("清除崩溃记录");
+            clear.setOnClickListener(v -> {
+                CrashLog.clear(this);
+                refresh();
+            });
+            notes.addView(clear, new LinearLayout.LayoutParams(-1, -2));
+        }
         if (!keyServiceOn()) {
-            note("音量键和细调常驻需要开启无障碍服务。", "打开无障碍设置",
-                    v -> startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));
+            note("音量键细调和下拉滑块需要开启无障碍服务「声光」。开关是灰色的话：系统设置 → 应用 → 声光 → 右上角 ⋮ → 允许受限设置，再回来打开。",
+                    "打开声光的无障碍开关", v -> openKeyServiceSettings());
         }
         if (!Light.canWrite(this)) {
             note("调亮度需要「修改系统设置」权限。", "去授权", v -> startActivity(
@@ -189,6 +204,19 @@ public class PanelActivity extends Activity {
             t.setPadding(0, px(12), 0, 0);
             notes.addView(t);
         }
+    }
+
+    /** 直接打开本应用无障碍服务的开关页；系统不支持时退回无障碍总页面。 */
+    private void openKeyServiceSettings() {
+        if (android.os.Build.VERSION.SDK_INT >= 31) {
+            try {
+                startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_DETAILS_SETTINGS)
+                        .putExtra(Intent.EXTRA_COMPONENT_NAME, new ComponentName(this, KeyService.class).flattenToString()));
+                return;
+            } catch (ActivityNotFoundException ignored) {
+            }
+        }
+        startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS));
     }
 
     private boolean keyServiceOn() {
