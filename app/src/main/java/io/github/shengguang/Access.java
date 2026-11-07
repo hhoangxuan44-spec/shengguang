@@ -35,6 +35,23 @@ public class Access extends BroadcastReceiver {
         return c.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(WANTED, false);
     }
 
+    /**
+     * 是否被系统标成受限应用（从浏览器、文件管理器安装时会这样）。受限时写设置会被系统拒绝，
+     * 只能用 adb 解除。读不到时当作不受限。
+     */
+    static boolean restricted(Context c) {
+        try {
+            android.app.AppOpsManager ops = c.getSystemService(android.app.AppOpsManager.class);
+            int mode = ops.unsafeCheckOpNoThrow("android:access_restricted_settings",
+                    android.os.Process.myUid(), c.getPackageName());
+            return mode != android.app.AppOpsManager.MODE_ALLOWED && mode != android.app.AppOpsManager.MODE_DEFAULT;
+        } catch (RuntimeException e) {
+            return false;
+        }
+    }
+
+    static final String UNRESTRICT_CMD = "adb shell cmd appops set io.github.shengguang ACCESS_RESTRICTED_SETTINGS allow";
+
     /** 把本应用的服务加进已开启列表，不动其他应用的服务。成功返回 true。 */
     static boolean enable(Context c) {
         if (!Light.canSecure(c)) return false;

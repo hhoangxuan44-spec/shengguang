@@ -22,6 +22,14 @@ adb shell pm grant io.github.shengguang android.permission.WRITE_SECURE_SETTINGS
 之后在面板里点「一键开启」打开无障碍服务（酷比的无障碍设置页不列出第三方服务，没法手动开）。
 以后覆盖安装新版本，之前开着的服务会自动重新打开。不要先卸载，卸载会让上面的授权失效。
 
+**更新要用面板里的「安装已下载的更新」**：先用「下载最新版」让浏览器下载，再回到面板选中下载好的安装包，由声光自己安装。
+不要在浏览器或文件管理器里直接点开安装包：系统会把这样装的应用标成「受限」，受限的应用开不了无障碍服务，
+而酷比的系统里没有「允许受限设置」的入口，只能用 adb 解除：
+
+```
+adb shell cmd appops set io.github.shengguang ACCESS_RESTRICTED_SETTINGS allow
+```
+
 无障碍服务只处理音量加减两个键，并接收系统界面的窗口变化来判断下拉面板是否打开，不读取屏幕内容。
 
 ## 编译
