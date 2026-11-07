@@ -39,6 +39,15 @@
             </intent-filter>
         </service>
 
+        <!-- 覆盖安装后重新打开无障碍服务 -->
+        <receiver
+            android:name=".Access"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+
         <service
             android:name=".KeyService"
             android:label="声光"

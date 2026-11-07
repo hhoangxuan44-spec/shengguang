@@ -2,7 +2,6 @@ package io.github.shengguang;
 
 import android.app.Activity;
 import android.content.ActivityNotFoundException;
-import android.content.ComponentName;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.res.ColorStateList;
@@ -189,9 +188,20 @@ public class PanelActivity extends Activity {
             });
             notes.addView(clear, new LinearLayout.LayoutParams(-1, -2));
         }
-        if (!keyServiceOn()) {
-            note("音量键细调和下拉滑块需要开启无障碍服务「声光」。开关是灰色的话：系统设置 → 应用 → 声光 → 右上角 ⋮ → 允许受限设置，再回来打开。",
-                    "打开声光的无障碍开关", v -> openKeyServiceSettings());
+        if (!Access.isOn(this)) {
+            if (Light.canSecure(this)) {
+                note("音量键细调和下拉滑块需要开启无障碍服务「声光」。这台机器的无障碍设置里找不到它，点下面直接开启。",
+                        "一键开启", v -> {
+                            if (!Access.enable(this)) Toast.makeText(this, "开启失败", Toast.LENGTH_SHORT).show();
+                            // 系统绑定服务要一点时间
+                            v.postDelayed(this::refresh, 800);
+                        });
+            } else {
+                TextView t = text("音量键细调和下拉滑块需要开启无障碍服务「声光」。这台机器的无障碍设置里找不到它，"
+                        + "请先用电脑执行下面最后一条授权命令，之后这里会出现「一键开启」。", 13, MUTED);
+                t.setPadding(0, px(12), 0, 0);
+                notes.addView(t);
+            }
         }
         if (!Light.canWrite(this)) {
             note("调亮度需要「修改系统设置」权限。", "去授权", v -> startActivity(
@@ -204,35 +214,6 @@ public class PanelActivity extends Activity {
             t.setPadding(0, px(12), 0, 0);
             notes.addView(t);
         }
-    }
-
-    /**
-     * 先试直接打开声光的开关页（系统可能要求权限而拒绝），不行就打开无障碍总页面，
-     * 并请设置高亮声光这一项（原生设置支持，部分系统会忽略）。
-     */
-    private void openKeyServiceSettings() {
-        String me = new ComponentName(this, KeyService.class).flattenToString();
-        try {
-            startActivity(new Intent("android.settings.ACCESSIBILITY_DETAILS_SETTINGS")
-                    .putExtra(Intent.EXTRA_COMPONENT_NAME, me));
-            return;
-        } catch (ActivityNotFoundException | SecurityException ignored) {
-        }
-        Bundle args = new Bundle();
-        args.putString(":settings:fragment_args_key", me);
-        startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
-                .putExtra(":settings:fragment_args_key", me)
-                .putExtra(":settings:show_fragment_args", args));
-    }
-
-    private boolean keyServiceOn() {
-        String v = Settings.Secure.getString(getContentResolver(), Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
-        if (v == null) return false;
-        ComponentName me = new ComponentName(this, KeyService.class);
-        for (String s : v.split(":")) {
-            if (me.equals(ComponentName.unflattenFromString(s))) return true;
-        }
-        return false;
     }
 
     private int clampLight(int s) {

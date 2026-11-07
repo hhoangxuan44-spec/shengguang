@@ -43,6 +43,7 @@ public class KeyService extends AccessibilityService {
     @Override
     protected void onServiceConnected() {
         CrashLog.install(this);
+        Access.markWanted(this);
         sliders = new ShadeSliders(this);
         Sound.get(this).warm();
         Log.i(Sound.TAG, "KeyService connected, mode=" + Sound.get(this).mode());
