@@ -46,4 +46,47 @@ public class CurveTest {
         Curve c = new Curve(table());
         for (int i = 0; i <= 15; i++) assertEquals(i, c.at(c.levelForIndex(i)).index);
     }
+
+    @Test
+    public void fromAboveOnlyAttenuatesSoNothingClips() {
+        Curve c = new Curve(table(), true);
+        for (int l = 0; l <= 100; l++) assertTrue("level " + l, c.at(l).gainMb <= 0);
+    }
+
+    @Test
+    public void fromAboveLoudnessNeverGoesDown() {
+        double[] d = table();
+        Curve c = new Curve(d, true);
+        double last = Double.NEGATIVE_INFINITY;
+        for (int l = 1; l <= 100; l++) {
+            Curve.Point p = c.at(l);
+            double out = d[p.index] + p.gainMb / 100.0;
+            assertTrue("level " + l + ": " + out + " < " + last, out >= last - 0.01);
+            last = out;
+        }
+    }
+
+    @Test
+    public void fromAboveMatchesBelowInLoudness() {
+        double[] d = table();
+        Curve below = new Curve(d), above = new Curve(d, true);
+        for (int l = 1; l <= 100; l++) {
+            Curve.Point a = below.at(l), b = above.at(l);
+            assertEquals("level " + l, d[a.index] + a.gainMb / 100.0, d[b.index] + b.gainMb / 100.0, 0.02);
+        }
+    }
+
+    @Test
+    public void fromAboveLevelForIndexRoundTrips() {
+        Curve c = new Curve(table(), true);
+        for (int i = 0; i <= 15; i++) assertEquals(i, c.at(c.levelForIndex(i)).index);
+    }
+
+    @Test
+    public void flatTableFallsBackToFixedSteps() {
+        double[] d = new double[16];
+        Curve c = new Curve(d, true);
+        assertEquals(2.0, c.stepDb(), 1e-9);
+        assertTrue(c.at(50).gainMb < 0);
+    }
 }

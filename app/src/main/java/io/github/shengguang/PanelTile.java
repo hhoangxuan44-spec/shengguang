@@ -10,6 +10,7 @@ import android.service.quicksettings.TileService;
 public class PanelTile extends TileService {
     @Override
     public void onStartListening() {
+        CrashLog.install(this);
         Tile t = getQsTile();
         if (t == null) return;
         t.setState(Tile.STATE_INACTIVE);

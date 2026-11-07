@@ -1,8 +1,9 @@
 package io.github.shengguang;
 
 import android.app.Activity;
-import android.content.ComponentName;
+import android.content.ActivityNotFoundException;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.content.res.ColorStateList;
 import android.graphics.Color;
 import android.graphics.Typeface;
@@ -22,10 +23,13 @@ import android.widget.Toast;
 /** 声光面板：音量和亮度各一个滑块，都是单向设置，只有手指拖动才会改系统值。 */
 public class PanelActivity extends Activity {
     private static final int INK = 0xFFF2F2F7, MUTED = 0xFF8E8E93, CARD = 0xFF2C2C2E, ACCENT = 0xFFFFD60A;
+    // 应用本身没有联网权限：更新交给浏览器下载，系统安装器安装
+    private static final String RELEASES = "https://github.com/hhoangxuan44-spec/shengguang/releases/latest";
+    private static final String APK = RELEASES + "/download/shengguang.apk";
 
     private Sound sound;
     private SeekBar soundBar, lightBar;
-    private TextView soundValue, lightValue;
+    private TextView soundValue, lightValue, routeInfo;
     private final TextView[] modeBtn = new TextView[3];
     private TextView shadeBtn;
     private LinearLayout notes;
@@ -33,6 +37,7 @@ public class PanelActivity extends Activity {
     @Override
     protected void onCreate(Bundle b) {
         super.onCreate(b);
+        CrashLog.install(this);
         sound = Sound.get(this);
 
         LinearLayout root = new LinearLayout(this);
@@ -46,6 +51,8 @@ public class PanelActivity extends Activity {
         // 音量
         soundValue = text("", 15, MUTED);
         root.addView(header("音量", soundValue));
+        routeInfo = text("", 13, MUTED);
+        root.addView(routeInfo);
         soundBar = slider(Curve.LEVELS, ACCENT, p -> {
             sound.setLevel(p);
             showSound();
@@ -116,6 +123,28 @@ public class PanelActivity extends Activity {
         notes.setOrientation(LinearLayout.VERTICAL);
         root.addView(notes);
 
+        // 更新
+        TextView ver = text("当前版本 " + versionName(), 15, INK);
+        ver.setPadding(0, px(16), 0, px(4));
+        root.addView(ver);
+        LinearLayout update = row();
+        TextView download = chip("下载最新版");
+        download.setOnClickListener(v -> openUrl(APK));
+        update.addView(download, weight());
+        TextView changes = chip("看更新说明");
+        changes.setOnClickListener(v -> openUrl(RELEASES));
+        update.addView(changes, weight());
+        root.addView(update);
+        LinearLayout installRow = row();
+        TextView install = chip("安装已下载的更新");
+        install.setOnClickListener(v -> pickUpdate());
+        installRow.addView(install, weight());
+        root.addView(installRow);
+        TextView how = text("先用「下载最新版」让浏览器下载，下载完回来点「安装已下载的更新」选中它。"
+                + "不要在浏览器里直接点开安装：那样系统会把声光标成受限应用，无障碍服务会开不了。", 13, MUTED);
+        how.setPadding(0, px(6), 0, 0);
+        root.addView(how);
+
         ScrollView sv = new ScrollView(this);
         sv.addView(root);
         setContentView(sv);
@@ -151,9 +180,47 @@ public class PanelActivity extends Activity {
         }
         shadeBtn.setText(sound.shadeSliders() ? "下拉时显示滑块：开" : "下拉时显示滑块：关");
         notes.removeAllViews();
-        if (!keyServiceOn()) {
-            note("音量键和细调常驻需要开启无障碍服务。", "打开无障碍设置",
-                    v -> startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));
+        String crash = CrashLog.last(this);
+        if (crash != null) {
+            TextView t = text("上次崩溃（可长按复制发给开发者）：\n" + crash, 11, MUTED);
+            t.setTextIsSelectable(true);
+            t.setMaxLines(12);
+            t.setPadding(0, px(12), 0, px(6));
+            notes.addView(t);
+            TextView clear = chip("清除崩溃记录");
+            clear.setOnClickListener(v -> {
+                CrashLog.clear(this);
+                refresh();
+            });
+            notes.addView(clear, new LinearLayout.LayoutParams(-1, -2));
+        }
+        if (!Access.isOn(this)) {
+            if (Light.canSecure(this) && Access.restricted(this)) {
+                TextView t = text("音量键细调和下拉滑块需要无障碍服务，但系统把声光标成了受限应用（用浏览器或文件管理器安装就会这样），"
+                        + "开不了。用 adb 执行下面这条解除，再点「一键开启」：\n" + Access.UNRESTRICT_CMD
+                        + "\n以后用面板里的「安装已下载的更新」来装新版，就不会再被标成受限。", 13, MUTED);
+                t.setTextIsSelectable(true);
+                t.setPadding(0, px(12), 0, px(6));
+                notes.addView(t);
+                TextView b = chip("一键开启");
+                b.setOnClickListener(v -> {
+                    Access.enable(this);
+                    v.postDelayed(this::refresh, 800);
+                });
+                notes.addView(b, new LinearLayout.LayoutParams(-1, -2));
+            } else if (Light.canSecure(this)) {
+                note("音量键细调和下拉滑块需要开启无障碍服务「声光」。这台机器的无障碍设置里找不到它，点下面直接开启。",
+                        "一键开启", v -> {
+                            if (!Access.enable(this)) Toast.makeText(this, "开启失败", Toast.LENGTH_SHORT).show();
+                            // 系统绑定服务要一点时间
+                            v.postDelayed(this::refresh, 800);
+                        });
+            } else {
+                TextView t = text("音量键细调和下拉滑块需要开启无障碍服务「声光」。这台机器的无障碍设置里找不到它，"
+                        + "请先用电脑执行下面最后一条授权命令，之后这里会出现「一键开启」。", 13, MUTED);
+                t.setPadding(0, px(12), 0, 0);
+                notes.addView(t);
+            }
         }
         if (!Light.canWrite(this)) {
             note("调亮度需要「修改系统设置」权限。", "去授权", v -> startActivity(
@@ -166,16 +233,6 @@ public class PanelActivity extends Activity {
             t.setPadding(0, px(12), 0, 0);
             notes.addView(t);
         }
-    }
-
-    private boolean keyServiceOn() {
-        String v = Settings.Secure.getString(getContentResolver(), Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
-        if (v == null) return false;
-        ComponentName me = new ComponentName(this, KeyService.class);
-        for (String s : v.split(":")) {
-            if (me.equals(ComponentName.unflattenFromString(s))) return true;
-        }
-        return false;
     }
 
     private int clampLight(int s) {
@@ -192,6 +249,52 @@ public class PanelActivity extends Activity {
 
     private void showSound() {
         soundValue.setText(String.valueOf(sound.level()));
+        Route r = sound.route();
+        routeInfo.setText(r.external
+                ? "输出：" + r.label + "（由耳机调节音量，细调只往下压，不会削顶）"
+                : "输出：" + r.label);
+    }
+
+    private static final int PICK_APK = 1;
+
+    private void pickUpdate() {
+        if (!getPackageManager().canRequestPackageInstalls()) {
+            Toast.makeText(this, "先允许声光安装应用，再回来点一次", Toast.LENGTH_LONG).show();
+            startActivity(new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:" + getPackageName())));
+            return;
+        }
+        Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("*/*")
+                .putExtra(Intent.EXTRA_MIME_TYPES, new String[]{"application/vnd.android.package-archive", "application/octet-stream"});
+        try {
+            startActivityForResult(i, PICK_APK);
+        } catch (ActivityNotFoundException e) {
+            Toast.makeText(this, "没有找到文件选择器", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    @Override
+    protected void onActivityResult(int request, int result, Intent data) {
+        super.onActivityResult(request, result, data);
+        if (request != PICK_APK || result != RESULT_OK || data == null || data.getData() == null) return;
+        Toast.makeText(this, "正在检查安装包…", Toast.LENGTH_SHORT).show();
+        Updater.install(this, data.getData(), why -> Toast.makeText(this, why, Toast.LENGTH_LONG).show());
+    }
+
+    private String versionName() {
+        try {
+            // 和发布页的「声光 vN」对得上
+            return "v" + getPackageManager().getPackageInfo(getPackageName(), 0).getLongVersionCode();
+        } catch (PackageManager.NameNotFoundException e) {
+            return "?";
+        }
+    }
+
+    private void openUrl(String url) {
+        try {
+            startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+        } catch (ActivityNotFoundException e) {
+            Toast.makeText(this, "没有找到浏览器", Toast.LENGTH_SHORT).show();
+        }
     }
 
     private void showLight(int s) {
