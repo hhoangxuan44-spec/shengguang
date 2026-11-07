@@ -206,17 +206,23 @@ public class PanelActivity extends Activity {
         }
     }
 
-    /** 直接打开本应用无障碍服务的开关页；系统不支持时退回无障碍总页面。 */
+    /**
+     * 先试直接打开声光的开关页（系统可能要求权限而拒绝），不行就打开无障碍总页面，
+     * 并请设置高亮声光这一项（原生设置支持，部分系统会忽略）。
+     */
     private void openKeyServiceSettings() {
-        if (android.os.Build.VERSION.SDK_INT >= 31) {
-            try {
-                startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_DETAILS_SETTINGS)
-                        .putExtra(Intent.EXTRA_COMPONENT_NAME, new ComponentName(this, KeyService.class).flattenToString()));
-                return;
-            } catch (ActivityNotFoundException ignored) {
-            }
+        String me = new ComponentName(this, KeyService.class).flattenToString();
+        try {
+            startActivity(new Intent("android.settings.ACCESSIBILITY_DETAILS_SETTINGS")
+                    .putExtra(Intent.EXTRA_COMPONENT_NAME, me));
+            return;
+        } catch (ActivityNotFoundException | SecurityException ignored) {
         }
-        startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS));
+        Bundle args = new Bundle();
+        args.putString(":settings:fragment_args_key", me);
+        startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+                .putExtra(":settings:fragment_args_key", me)
+                .putExtra(":settings:show_fragment_args", args));
     }
 
     private boolean keyServiceOn() {
