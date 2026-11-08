@@ -39,12 +39,20 @@ public class KeyService extends AccessibilityService {
     };
     private final Runnable hidePill = this::removePill;
     private ShadeSliders sliders;
+    private final android.content.BroadcastReceiver screenOff = new android.content.BroadcastReceiver() {
+        @Override
+        public void onReceive(android.content.Context c, android.content.Intent i) {
+            if (sliders != null) sliders.hide();
+        }
+    };
 
     @Override
     protected void onServiceConnected() {
         CrashLog.install(this);
         Access.markWanted(this);
         sliders = new ShadeSliders(this);
+        // 灭屏时收起滑块，否则亮屏后会挂在锁屏上
+        registerReceiver(screenOff, new android.content.IntentFilter(android.content.Intent.ACTION_SCREEN_OFF));
         Sound.get(this).warm();
         Log.i(Sound.TAG, "KeyService connected, mode=" + Sound.get(this).mode());
     }
@@ -136,14 +144,14 @@ public class KeyService extends AccessibilityService {
 
     @Override
     public void onAccessibilityEvent(AccessibilityEvent event) {
+        if (sliders == null) return;
         // 实测：下拉面板打开发 PANE_APPEARED，收起发 PANE_DISAPPEARED，通知栏和快捷设置互切没有开关信号。
         // 锁屏也发 PANE_APPEARED，所以按系统的锁屏状态排除，不看事件文字。
         int changes = event.getContentChangeTypes();
         if ((changes & AccessibilityEvent.CONTENT_CHANGE_TYPE_PANE_DISAPPEARED) != 0) {
             sliders.hide();
         } else if ((changes & AccessibilityEvent.CONTENT_CHANGE_TYPE_PANE_APPEARED) != 0) {
-            boolean locked = ((android.app.KeyguardManager) getSystemService(KEYGUARD_SERVICE)).isKeyguardLocked();
-            if (!locked && Sound.get(this).shadeSliders()) sliders.show();
+            if (Sound.get(this).shadeSliders()) sliders.show();   // show() 自己会排除锁屏和灭屏
             else sliders.hide();
         }
     }
@@ -157,6 +165,10 @@ public class KeyService extends AccessibilityService {
         main.removeCallbacksAndMessages(null);
         removePill();
         if (sliders != null) sliders.hide();
+        try {
+            unregisterReceiver(screenOff);
+        } catch (RuntimeException ignored) {
+        }
         super.onDestroy();
     }
 }

@@ -23,6 +23,25 @@ final class ShadeSliders {
     private final WindowManager wm;
     private final Handler main = new Handler(Looper.getMainLooper());
     private final Runnable autoHide = this::hide;
+    // 显示期间每半秒确认一次：锁屏、灭屏时立刻收起。下拉面板的开关事件和锁屏状态有先后差，单看事件会漏
+    private final Runnable watch = new Runnable() {
+        @Override
+        public void run() {
+            if (root == null) return;
+            if (!allowed(context)) {
+                hide();
+                return;
+            }
+            main.postDelayed(this, 500);
+        }
+    };
+
+    /** 只在解锁、亮屏时显示 */
+    static boolean allowed(Context c) {
+        android.app.KeyguardManager km = (android.app.KeyguardManager) c.getSystemService(Context.KEYGUARD_SERVICE);
+        android.os.PowerManager pm = (android.os.PowerManager) c.getSystemService(Context.POWER_SERVICE);
+        return !km.isKeyguardLocked() && pm.isInteractive();
+    }
     private LinearLayout root;
     private SliderView sound, light;
 
@@ -32,13 +51,20 @@ final class ShadeSliders {
     }
 
     void show() {
+        if (!allowed(context)) {
+            hide();
+            return;
+        }
         if (root == null && !build()) return;
         refresh();
         rearm();
+        main.removeCallbacks(watch);
+        main.postDelayed(watch, 500);
     }
 
     void hide() {
         main.removeCallbacks(autoHide);
+        main.removeCallbacks(watch);
         if (root != null) {
             try {
                 wm.removeView(root);
